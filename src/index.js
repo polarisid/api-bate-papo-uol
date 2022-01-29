@@ -27,4 +27,13 @@ server.get('/participants',async (req,res)=>{
     }
 })
 
+server.post('/participants',async (req,res)=>{
+    try{
+
+    }
+    catch(error){
+
+    }
+})
+
 server.listen(5000, ()=>{console.log("iniciado Server")});
