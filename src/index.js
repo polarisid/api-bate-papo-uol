@@ -78,11 +78,9 @@ server.post('/messages',async (req,res)=>{
         let user_logged = req.headers.user;
         // if (user===null || user===""||user===undefined){res.sendStatus(422);return }
         const participantOnline = await db.collection('participants').findOne({name:user_logged})
-        console.log(participantOnline)
-        if(participantOnline==null){res.sendStatus(422);console.log("erro1"); return}
-        
+        if(participantOnline==null){res.sendStatus(422);return}
         const validation = messageSchema.validate(req.body, { abortEarly: true })
-        if(validation.error){res.sendStatus(422);console.log("erro2");return}
+        if(validation.error){res.sendStatus(422);return}
         let message ={"from":user_logged,...req.body,"time":dateConvertHour}
         await db.collection('messages').insertOne(message)
         
@@ -107,6 +105,18 @@ server.post('/status',async (req,res)=>{
         res.sendStatus(500); 
     }
 })
+
+setInterval(()=>findAbsent(),15000);
+async function findAbsent(){
+    try{
+    let timeCut = parseInt(Date.now())-10000
+    await db.collection('participants').deleteMany({ lastStatus: {$lt:timeCut} })    
+    }catch(error){
+        console.error(error);
+        res.sendStatus(500); 
+    }
+
+}
 
 
 server.listen(5000, ()=>{console.log("iniciado Server")});
