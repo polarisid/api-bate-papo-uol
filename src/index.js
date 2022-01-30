@@ -15,7 +15,7 @@ const userSchema = joi.object({
 const messageSchema = joi.object({
     to: joi.string().required(),
     text: joi.string().required(),
-    type: joi.string().required(),
+    type: joi.string().valid("message", "private_message").required(),
   });
 
 const mongoClient = new MongoClient(process.env.MONGO_URI);
@@ -43,7 +43,6 @@ server.post('/participants',async (req,res)=>{
         if(validation.error){res.sendStatus(422); return}
         else if(participantOnline){res.sendStatus(409); return}
         let dateNow= Date.now();
-        // let dateConvert= `${new Date(dateNow).getHours()}:${new Date(dateNow).getMinutes()}:${new Date(dateNow).getSeconds()}`
         let dateConvertHour= new Date(dateNow).toTimeString().split(' ')[0]
         let statusMessage={"from": req.body.user, "to": 'Todos', "text": 'entra na sala...', "type": 'status', "time": dateConvertHour}
         let newParticipant = { "user":req.body.user, "lastStatus":dateNow}
@@ -72,5 +71,25 @@ server.get('/messages', async (req,res)=>{
     }
 })
 
+server.post('/messages',async (req,res)=>{
+    console.log(req.headers.user)
+    let dateNow= Date.now();
+    let dateConvertHour= new Date(dateNow).toTimeString().split(' ')[0]
+    try{
+        const user = req.headers.user;
+        // if (user===null || user===""||user===undefined){res.sendStatus(422);return }
+        const participantOnline = await db.collection('participants').findOne({ user: user })
+        if(participantOnline==null){res.sendStatus(422); return}
+        const validation = messageSchema.validate(req.body, { abortEarly: true })
+        if(validation.error){res.sendStatus(422);return}
+        let message ={"from":user,...req.body,"time":dateConvertHour}
+        await db.collection('messages').insertOne(message)
+        res.sendStatus(201)
+    }
+    catch(error){
+        console.error(error);
+        res.sendStatus(500); 
+    }
+})
 
 server.listen(5000, ()=>{console.log("iniciado Server")});
