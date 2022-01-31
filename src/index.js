@@ -1,4 +1,5 @@
 import express,{json} from 'express';
+import { stripHtml } from "string-strip-html";
 import cors from 'cors';
 import joi from 'joi';
 import { MongoClient,ObjectId } from "mongodb";
@@ -38,14 +39,15 @@ server.get('/participants',async (req,res)=>{
 
 server.post('/participants',async (req,res)=>{
     try{
-        const participantOnline = await db.collection('participants').findOne({ name: req.body.name })
+        let username= stripHtml(req.body.name).result
+        const participantOnline = await db.collection('participants').findOne({ name: username })
         const validation = userSchema.validate(req.body, { abortEarly: true });
         if(validation.error){res.sendStatus(422); return}
         else if(participantOnline){res.sendStatus(409); return}
         let dateNow= Date.now();
         let dateConvertHour= new Date(dateNow).toTimeString().split(' ')[0]
-        let statusMessage={"from": req.body.name, "to": 'Todos', "text": 'entra na sala...', "type": 'status', "time": dateConvertHour}
-        let newParticipant = { "name":req.body.name, "lastStatus":dateNow}
+        let statusMessage={"from": username, "to": 'Todos', "text": 'entra na sala...', "type": 'status', "time": dateConvertHour}
+        let newParticipant = { "name":username, "lastStatus":dateNow}
         await db.collection('participants').insertOne(newParticipant)
         await db.collection('messages').insertOne(statusMessage)
         res.sendStatus(201)
@@ -83,7 +85,6 @@ server.post('/messages',async (req,res)=>{
         if(validation.error){res.sendStatus(422);return}
         let message ={"from":user_logged,...req.body,"time":dateConvertHour}
         await db.collection('messages').insertOne(message)
-        
         res.sendStatus(201)
     }
     catch(error){
@@ -105,12 +106,38 @@ server.post('/status',async (req,res)=>{
         res.sendStatus(500); 
     }
 })
+server.delete('/messages/:id',async (req,res)=>{
+    let user = req.headers.user
+    let id =(req.params.id)
+    try{
+        const messages =await db.collection('messages').find({$and:[{_id:new ObjectId(id)},{from:user}]}).toArray();
+        
+        if(messages===null||messages===undefined||messages===[]){
+            let msg=await db.collection('messages').find({_id:new ObjectId(id)}).toArray();
+            if(msg){res.sendStatus(401);return}  
+            res.sendStatus(404);
+            return;
+        }
+        await db.collection('messages').deleteOne({$and:[{_id:new ObjectId(id)},{from:user}]})
+    }catch(error){
+        console.error(error);
+        res.sendStatus(500);
+    }
+
+})
 
 setInterval(()=>findAbsent(),15000);
 async function findAbsent(){
     try{
+    let dateNow= Date.now();
+    let dateConvertHour= new Date(dateNow).toTimeString().split(' ')[0]
+    let statusMessage={"to": 'Todos', "text": 'sai da sala...', "type": 'status', "time": dateConvertHour}
     let timeCut = parseInt(Date.now())-10000
-    await db.collection('participants').deleteMany({ lastStatus: {$lt:timeCut} })    
+    const usersOff =await db.collection('participants').find({lastStatus: {$lt:timeCut}}).toArray();
+    await usersOff.map((item)=>{ db.collection('messages').insertOne({"from": item.name, ...statusMessage})})
+    await db.collection('participants').deleteMany({ lastStatus: {$lt:timeCut} })
+    
+    // let statusMessage={"from": username, "to": 'Todos', "text": 'entra na sala...', "type": 'status', "time": dateConvertHour}
     }catch(error){
         console.error(error);
         res.sendStatus(500); 
